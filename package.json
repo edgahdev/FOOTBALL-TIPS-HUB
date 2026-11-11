@@ -10,7 +10,8 @@
     "make-admin-hash": "node make-admin-hash.js"
   },
   "engines": {
-    "node": ">22.x"
+  "node": "22.16.0"
+}
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

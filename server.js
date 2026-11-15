@@ -87,3 +87,58 @@ app.get("*",(req,res)=>res.sendFile(path.join(__dirname,"public","index.html")))
 app.use((err,req,res,next)=>{console.error("Application error:",err);if(res.headersSent)return next(err);if(err.code===11000)return res.status(409).json({error:"A record with those details already exists."});res.status(500).json({error:"Server error. Please try again or contact support."});});
 initializeDatabase().then(()=>app.listen(PORT,()=>console.log(`Football Tips Hub listening on ${PORT}; M-Pesa STK ${process.env.DARAJA_ENABLED==="true"?"enabled":"disabled"}`))).catch(e=>{console.error("FATAL database startup error:",e);process.exit(1);});
 process.on("SIGTERM",async()=>{await client.close();process.exit(0);});
+app.put("/api/me/profile", auth, asyncRoute(async (req, res) => {
+  if (req.auth.role !== "member") {
+    return res.status(403).json({ error: "Members only." });
+  }
+
+  const name = String(req.body.name || "").trim();
+  const email = String(req.body.email || "").trim().toLowerCase();
+
+  let phone;
+  try {
+    phone = normalizePhone(req.body.phone);
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+
+  if (name.length < 2 || name.length > 80) {
+    return res.status(400).json({ error: "Enter a valid full name." });
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: "Enter a valid email address." });
+  }
+
+  try {
+    const result = await users.updateOne(
+      { _id: req.auth.sub },
+      {
+        $set: {
+          name,
+          email,
+          phone,
+          updated_at: iso()
+        }
+      }
+    );
+
+    if (!result.matchedCount) {
+      return res.status(404).json({ error: "Account not found." });
+    }
+
+    const updatedUser = await users.findOne({ _id: req.auth.sub });
+    res.json({
+      ok: true,
+      message: "Account details updated successfully.",
+      user: safeUser(updatedUser)
+    });
+  } catch (e) {
+    if (e.code === 11000) {
+      return res.status(409).json({
+        error: "That email address or phone number is already registered."
+      });
+    }
+    throw e;
+  }
+}));
